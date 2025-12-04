@@ -98,11 +98,6 @@ class LogFileMonitor:
         if not os.path.exists(self.file_path):
             raise FileNotFoundError(f"Log file not found: {self.file_path}")
             
-        # Do initial full read of the file
-        self.parser.parse_file(self.file_path, start_from_end=False)
-        if self.update_callback:
-            self.update_callback()
-            
         # Create handler (starts at end of file for future updates)
         self.handler = LogFileHandler(self.file_path, self.parser, self.update_callback)
         
@@ -159,11 +154,6 @@ class FallbackFileMonitor:
         if not os.path.exists(self.file_path):
             raise FileNotFoundError(f"Log file not found: {self.file_path}")
             
-        # Do initial full read of the file
-        self.parser.parse_file(self.file_path)
-        if self.update_callback:
-            self.update_callback()
-            
         self.monitoring = True
         self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.monitor_thread.start()
@@ -209,7 +199,7 @@ class FallbackFileMonitor:
                     
                 # Parse new lines
                 for line_num, line in enumerate(new_lines, 1):
-                    print(f"Processing line {self.last_position // 50 + line_num}")
+                    #print(f"Processing line {self.last_position // 50 + line_num}")
                     self.parser.parse_line(line)
                     
                 # Update position
@@ -240,6 +230,17 @@ class SmartFileMonitor:
         if self.current_monitor and self.current_monitor.is_monitoring():
             return
             
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"Log file not found: {self.file_path}")
+            
+        # Reset stats before initial parse in case there was already data
+        self.parser.reset_stats()
+        
+        # Do initial full read of the file before starting monitoring
+        self.parser.parse_file(self.file_path, start_from_end=False)
+        if self.update_callback:
+            self.update_callback()
+        
         # Try watchdog first
         if self.use_watchdog:
             try:
