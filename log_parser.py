@@ -38,6 +38,30 @@ class TransactionItem:
 
 
 @dataclass
+class MissionRecord:
+    """Individual mission completion/failure record"""
+    mission_id: str = ""
+    player_name: str = ""
+    player_id: str = ""
+    completion_type: str = ""  # "Complete", "Abandon", "Fail"
+    reason: str = ""
+    timestamp: Optional[datetime] = None
+
+
+@dataclass
+class MissionInfo:
+    """Mission tracking information"""
+    missions: List[MissionRecord] = None
+    missions_completed: int = 0
+    missions_abandoned: int = 0
+    missions_failed: int = 0
+    
+    def __post_init__(self):
+        if self.missions is None:
+            self.missions = []
+
+
+@dataclass
 class InventoryInfo:
     """Inventory and transaction tracking (placeholder for future implementation)"""
     transactions: List[TransactionItem] = None
@@ -57,6 +81,7 @@ class GameStats:
     """Complete game statistics container"""
     session: SessionInfo
     inventory: InventoryInfo
+    missions: MissionInfo
     last_update: Optional[datetime] = None
 
 
@@ -66,7 +91,8 @@ class SCLogParser:
     def __init__(self):
         self.stats = GameStats(
             session=SessionInfo(),
-            inventory=InventoryInfo()
+            inventory=InventoryInfo(),
+            missions=MissionInfo()
         )
         self.patterns = self._compile_patterns()
         
@@ -98,6 +124,9 @@ class SCLogParser:
             # Channel Created specific patterns (extract multiple pieces of info)
             'channel_created': re.compile(r'map="([^"]*)".*?nickname="([^"]*)".*?playerGEID=(\d+)'),
             'channel_disconnected': re.compile(r'uptime_secs=([\d.]+)'),
+            
+            # Mission patterns
+            'mission_end': re.compile(r'MissionId\[([^\]]+)\]\s+Player\[([^\]]+)\]\s+PlayerId\[([^\]]+)\]\s+CompletionType\[([^\]]+)\]\s+Reason\[([^\]]+)\]'),
         }
     
     def parse_line(self, line: str) -> bool:
@@ -147,6 +176,9 @@ class SCLogParser:
                 return True
             elif log_type == "CEntityComponentCommodityUIProvider::SendCommodityBuyRequest":
                 self._handle_commodity_buy_request(line)
+                return True
+            elif log_type == "EndMission":
+                self._handle_end_mission(line)
                 return True
             # Add more log type handlers here as needed
         else:
@@ -337,6 +369,27 @@ class SCLogParser:
         if uptime_match:
             self.stats.session.uptime_seconds = float(uptime_match.group(1))
     
+    def _handle_end_mission(self, line: str) -> None:
+        """Handle EndMission log entries for mission completion tracking"""
+        match = self.patterns['mission_end'].search(line)
+        if match:
+            mission_id = match.group(1)
+            player_name = match.group(2)
+            player_id = match.group(3)
+            completion_type = match.group(4)
+            reason = match.group(5)
+            
+            mission = MissionRecord(
+                mission_id=mission_id,
+                player_name=player_name,
+                player_id=player_id,
+                completion_type=completion_type,
+                reason=reason,
+                timestamp=self.stats.last_update
+            )
+            
+            self._add_mission(mission)
+    
     def _add_transaction(self, transaction: TransactionItem) -> None:
         """Add a transaction and update inventory statistics"""
         self.stats.inventory.transactions.append(transaction)
@@ -356,9 +409,26 @@ class SCLogParser:
             self.stats.inventory.total_money_spent
         )
     
+    def _add_mission(self, mission: MissionRecord) -> None:
+        """Add a mission and update mission statistics"""
+        self.stats.missions.missions.append(mission)
+        
+        # Update mission counters
+        if mission.completion_type.lower() == "complete":
+            self.stats.missions.missions_completed += 1
+        elif mission.completion_type.lower() == "abandon":
+            self.stats.missions.missions_abandoned += 1
+        else:
+            # Count any other completion type as failed
+            self.stats.missions.missions_failed += 1
+    
     def get_recent_transactions(self, limit: int = 10) -> List[TransactionItem]:
         """Get the most recent transactions"""
         return self.stats.inventory.transactions[-limit:] if self.stats.inventory.transactions else []
+    
+    def get_recent_missions(self, limit: int = 10) -> List[MissionRecord]:
+        """Get the most recent missions"""
+        return self.stats.missions.missions[-limit:] if self.stats.missions.missions else []
     
     def get_transaction_summary(self) -> str:
         """Get a formatted summary of recent transactions"""
@@ -372,6 +442,20 @@ class SCLogParser:
             action = "Bought" if trans.transaction_type == "purchase" else "Sold"
             total_cost = trans.price * trans.quantity
             summary += f"{time_str} - {action} {trans.quantity}x {trans.item_name} for {total_cost:,.0f} aUEC at {trans.location}\n"
+        
+        return summary.strip()
+    
+    def get_mission_summary(self) -> str:
+        """Get a formatted summary of recent missions"""
+        recent = self.get_recent_missions(5)
+        if not recent:
+            return "No recent missions"
+        
+        summary = "=== Recent Missions ===\n"
+        for mission in reversed(recent):  # Show most recent first
+            time_str = mission.timestamp.strftime('%H:%M:%S') if mission.timestamp else 'Unknown'
+            status = mission.completion_type
+            summary += f"{time_str} - {status}: {mission.player_name} - {mission.reason} (ID: {mission.mission_id[:8]}...)\n"
         
         return summary.strip()
     
@@ -408,6 +492,11 @@ class SCLogParser:
         for i, transaction in enumerate(stats_dict['inventory']['transactions']):
             if self.stats.inventory.transactions[i].timestamp:
                 transaction['timestamp'] = self.stats.inventory.transactions[i].timestamp.isoformat()
+        
+        # Convert mission timestamps
+        for i, mission in enumerate(stats_dict['missions']['missions']):
+            if self.stats.missions.missions[i].timestamp:
+                mission['timestamp'] = self.stats.missions.missions[i].timestamp.isoformat()
             
         return stats_dict
     
@@ -415,6 +504,7 @@ class SCLogParser:
         """Get formatted statistics as a string"""
         session = self.stats.session
         inv = self.stats.inventory
+        missions = self.stats.missions
         
         uptime_hours = session.uptime_seconds / 3600 if session.uptime_seconds else 0
         
@@ -436,6 +526,15 @@ Recent Transactions: {len(inv.transactions)}
 
 {self.get_transaction_summary()}
 
+=== Missions ===
+
+Completed: {missions.missions_completed}
+Abandoned: {missions.missions_abandoned}
+Failed: {missions.missions_failed}
+Total Missions: {len(missions.missions)}
+
+{self.get_mission_summary()}
+
 Last Update: {self.stats.last_update.strftime('%H:%M:%S') if self.stats.last_update else 'Never'}
 """
 
@@ -443,7 +542,8 @@ Last Update: {self.stats.last_update.strftime('%H:%M:%S') if self.stats.last_upd
         """Reset all statistics to default values"""
         self.stats = GameStats(
             session=SessionInfo(),
-            inventory=InventoryInfo()
+            inventory=InventoryInfo(),
+            missions=MissionInfo()
         )
 
 

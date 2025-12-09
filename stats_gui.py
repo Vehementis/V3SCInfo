@@ -76,9 +76,14 @@ class SCStatsGUI:
         self.stats_tabview.add("Inventory")
         self.inventory_frame = self.stats_tabview.tab("Inventory")
         
+        # Missions tab
+        self.stats_tabview.add("Missions")
+        self.missions_frame = self.stats_tabview.tab("Missions")
+        
         self.create_setup_widgets()
         self.create_session_widgets()
         self.create_inventory_widgets()
+        self.create_missions_widgets()
         
     def create_setup_widgets(self):
         """Create setup widgets in the Setup tab"""
@@ -314,6 +319,50 @@ C:/Program Files/Roberts Space Industries/StarCitizen/LIVE/Game.log"""
                                                font=ctk.CTkFont(family="Consolas", size=11))
         self.transactions_text.pack(fill="both", expand=True, padx=10, pady=5)
         
+    def create_missions_widgets(self):
+        """Create missions information widgets with mission tracking"""
+        
+        # Mission Summary frame
+        mission_summary_frame = ctk.CTkFrame(self.missions_frame)
+        mission_summary_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(mission_summary_frame, text="Mission Summary", 
+                    font=ctk.CTkFont(size=16, weight="bold")).pack(pady=5)
+        
+        self.missions_completed_var = tk.StringVar()
+        self.missions_abandoned_var = tk.StringVar()
+        self.missions_failed_var = tk.StringVar()
+        self.total_missions_var = tk.StringVar()
+        
+        mission_grid = ctk.CTkFrame(mission_summary_frame)
+        mission_grid.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(mission_grid, text="Completed:", width=120).grid(row=0, column=0, sticky="w", padx=5)
+        self.completed_label = ctk.CTkLabel(mission_grid, textvariable=self.missions_completed_var, width=200)
+        self.completed_label.grid(row=0, column=1, sticky="w")
+        
+        ctk.CTkLabel(mission_grid, text="Abandoned:", width=120).grid(row=1, column=0, sticky="w", padx=5)
+        self.abandoned_label = ctk.CTkLabel(mission_grid, textvariable=self.missions_abandoned_var, width=200)
+        self.abandoned_label.grid(row=1, column=1, sticky="w")
+        
+        ctk.CTkLabel(mission_grid, text="Failed:", width=120).grid(row=2, column=0, sticky="w", padx=5)
+        self.failed_label = ctk.CTkLabel(mission_grid, textvariable=self.missions_failed_var, width=200)
+        self.failed_label.grid(row=2, column=1, sticky="w")
+        
+        ctk.CTkLabel(mission_grid, text="Total Missions:", width=120).grid(row=3, column=0, sticky="w", padx=5)
+        ctk.CTkLabel(mission_grid, textvariable=self.total_missions_var, width=200).grid(row=3, column=1, sticky="w")
+        
+        # Recent Missions frame
+        missions_frame = ctk.CTkFrame(self.missions_frame)
+        missions_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        ctk.CTkLabel(missions_frame, text="Recent Missions", 
+                    font=ctk.CTkFont(size=16, weight="bold")).pack(pady=5)
+        
+        # Scrollable text box for missions
+        self.missions_text = ctk.CTkTextbox(missions_frame, width=750, height=300, 
+                                           font=ctk.CTkFont(family="Consolas", size=11))
+        self.missions_text.pack(fill="both", expand=True, padx=10, pady=5)
 
         
     def setup_layout(self):
@@ -510,6 +559,41 @@ C:/Program Files/Roberts Space Industries/StarCitizen/LIVE/Game.log"""
         else:
             self.transactions_text.delete("0.0", "end")
             self.transactions_text.insert("0.0", "No recent transactions")
+        
+        # Update mission information
+        self.missions_completed_var.set(str(stats.missions.missions_completed))
+        self.missions_abandoned_var.set(str(stats.missions.missions_abandoned))
+        self.missions_failed_var.set(str(stats.missions.missions_failed))
+        self.total_missions_var.set(str(len(stats.missions.missions)))
+        
+        # Set color coding for mission counters
+        self.completed_label.configure(text_color="green")
+        self.abandoned_label.configure(text_color="orange")
+        self.failed_label.configure(text_color="red")
+        
+        # Update recent missions display
+        recent_missions = self.parser.get_recent_missions(15)  # Last 15 missions
+        if recent_missions:
+            # Add header
+            header = " Time    | Status     | Player         | Reason                      | Mission ID\n"
+            header += "-" * 105 + "\n"
+            
+            missions_text = header
+            for mission in reversed(recent_missions):  # Most recent first
+                time_str = mission.timestamp.strftime('%H:%M:%S') if mission.timestamp else 'Unknown'
+                status = mission.completion_type
+                player_display = mission.player_name[:14] if len(mission.player_name) > 14 else mission.player_name
+                reason_display = mission.reason[:26] if len(mission.reason) > 26 else mission.reason
+                mission_id_display = mission.mission_id[:8] + "..." if len(mission.mission_id) > 8 else mission.mission_id
+                
+                missions_text += f"{time_str} | {status:<10} | {player_display:<14} | {reason_display:<26} | {mission_id_display}\n"
+            
+            # Update the textbox
+            self.missions_text.delete("0.0", "end")
+            self.missions_text.insert("0.0", missions_text)
+        else:
+            self.missions_text.delete("0.0", "end")
+            self.missions_text.insert("0.0", "No recent missions")
         
     def update_status(self, message: str):
         """Update status bar message"""
