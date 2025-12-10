@@ -28,7 +28,7 @@ class SCStatsGUI:
         
         # Initialize main window
         self.root = ctk.CTk()
-        self.root.title("Star Citizen Stats Reader - V3SCInfo")
+        self.root.title("V3SCInfo - Star Citizen Stats Reader")
         self.root.geometry("800x800")
         
         # Initialize parser and state
@@ -53,7 +53,7 @@ class SCStatsGUI:
         # Title
         self.title_label = ctk.CTkLabel(
             self.header_frame,
-            text="Star Citizen Stats Reader - V3SCInfo",
+            text="V3SCInfo - Star Citizen Stats Reader",
             font=ctk.CTkFont(size=24, weight="bold")
         )
         
