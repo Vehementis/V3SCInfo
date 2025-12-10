@@ -13,6 +13,7 @@ import threading
 import time
 import os
 from datetime import datetime
+from main import auto_detect_log
 
 from log_parser import SCLogParser, GameStats
 from file_monitor import SmartFileMonitor
@@ -389,41 +390,12 @@ C:/Program Files/Roberts Space Industries/StarCitizen/LIVE/Game.log"""
             self.set_log_file(file_path)
             
     def auto_detect_log_file(self):
-        """Auto-detect Star Citizen Game.log file"""
-        # Common Star Citizen installation paths
-        common_paths = [
-            "C:/Program Files/Roberts Space Industries/StarCitizen/LIVE/",
-            "D:/Program Files/Roberts Space Industries/StarCitizen/LIVE/",
-            "E:/Program Files/Roberts Space Industries/StarCitizen/LIVE/",
-            "C:/Games/StarCitizen/LIVE/",
-            "D:/Games/StarCitizen/LIVE/",
-            "E:/Games/StarCitizen/LIVE/",
-            "G:/games/RSI/StarCitizen/LIVE/",  # From the log we saw
-            os.path.join(os.path.expanduser("~"), "Documents/StarCitizen/LIVE/")
-        ]
-        
-        # Check current directory first
-        current_dir = os.getcwd()
-        current_log = os.path.join(current_dir, "Game.log")
-        if os.path.exists(current_log):
-            self.set_log_file(current_log)
-            return
-            
-        # Check common paths
-        for path in common_paths:
-            log_file = os.path.join(path, "Game.log")
-            if os.path.exists(log_file):
-                self.set_log_file(log_file)
-                return
-                
-        # Check if there's a log file in the same directory as this script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        parent_log = os.path.join(os.path.dirname(script_dir), "Game.log")
-        if os.path.exists(parent_log):
-            self.set_log_file(parent_log)
-            return
-            
-        self.update_status("Could not auto-detect Game.log file. Please select manually.")
+        """Auto-detect Star Citizen Game.log file using shared function"""
+        detected_path = auto_detect_log()
+        if detected_path:
+            self.set_log_file(detected_path)
+        else:
+            self.update_status("Could not auto-detect Game.log file. Please select manually.")
         
     def set_log_file(self, file_path: str):
         """Set the log file path and update UI"""
